@@ -1,4 +1,5 @@
 import tkinter as tk
+import platform
 
 class Damier(tk.Tk):
     def __init__(self):
@@ -8,12 +9,21 @@ class Damier(tk.Tk):
         
         # Récupération des dimensions de l'écran
         self.w, self.h = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"{self.w}x{self.h}+0+0")
-        self.state('zoomed')  # Mode plein écran
+        
+        # Gestion du plein écran selon l'OS
+        if platform.system() == "Windows":
+            self.geometry(f"{self.w}x{self.h}+0+0")
+            self.state('zoomed')
+        elif platform.system() == "Darwin":  # macOS
+            self.geometry(f"{self.w}x{self.h}+0+0")
+            self.state('zoomed')
+        else:  # Linux
+            self.geometry(f"{self.w}x{self.h}+0+0")
+            self.attributes('-zoomed', True)  # Alternative pour Linux
         
         # Dimensions adaptatives du plateau
-        self.lo = min(self.w * 0.7, self.h * 0.9)  # 70% de la largeur ou 90% de la hauteur
-        self.la = self.lo * 0.75  # Conserver le ratio 4:3
+        self.lo = min(self.w * 0.7, self.h * 0.9)
+        self.la = self.lo * 0.75
         
         self.click = False
         self.pion_selected = None
@@ -83,6 +93,12 @@ class Damier(tk.Tk):
 
     def create_board(self):
         """Création d'un damier 10x10 avec dimensions adaptatives"""
+        # Créer le canvas s'il n'existe pas encore
+        if not hasattr(self, 'can'):
+            self.can = tk.Canvas(self.board_frame, width=self.lo, height=self.la, 
+                                bg="burlywood", bd=3, relief="groove")
+            self.can.pack(expand=True, pady=20)
+        
         cell_width = self.lo / 10
         cell_height = self.la / 10
         
@@ -103,7 +119,7 @@ class Damier(tk.Tk):
         """Placement initial des pions avec dimensions adaptatives"""
         cell_width = self.lo / 10
         cell_height = self.la / 10
-        margin = min(cell_width, cell_height) * 0.2  # Marge proportionnelle
+        margin = min(cell_width, cell_height) * 0.2
         
         # Joueur 1 : lignes 0 à 3
         for row in range(0, 4):
@@ -137,15 +153,10 @@ class Damier(tk.Tk):
 
     def chequer_bank(self):
         """Création des zones pour les pièces capturées avec dimensions adaptatives"""
-        # Canvas pour le damier
-        self.can = tk.Canvas(self.board_frame, width=self.lo, height=self.la, 
-                            bg="burlywood", bd=3, relief="groove")
-        self.can.pack(expand=True, pady=20)
-        
-        # Zone joueur 1 (gauche)
         bank_width = self.w * 0.12
         bank_height = self.h * 0.6
         
+        # Zone joueur 1 (gauche)
         self.can_bank1 = tk.Canvas(self.player1_frame, width=bank_width, height=bank_height,
                                   bg="maroon", bd=3, relief="groove")
         self.can_bank1.pack(pady=20)
@@ -217,6 +228,7 @@ class Damier(tk.Tk):
         orig = self.pion_selected
         target = self.get_board_coords(event.x, event.y)
         
+        # Vérifier que la case cible est valide (brune et dans le plateau)
         if target not in self.cases or (target[0] + target[1]) % 2 == 0:
             self.move_piece_to_cell(orig, self.pion[orig])
             self.click = False
@@ -252,6 +264,7 @@ class Damier(tk.Tk):
                         legal = True
                         capture = True
 
+        # La case d'arrivée doit être vide
         if target in self.pion:
             legal = False
 
@@ -259,19 +272,25 @@ class Damier(tk.Tk):
             if capture and mid:
                 self.remove_piece(mid, captor=color)
             
+            # Déplacer le pion
             self.pion[target] = self.pion.pop(orig)
             
+            # Mettre à jour la position du roi si nécessaire
             if orig in self.rois:
                 self.rois[target] = self.rois.pop(orig)
                 if hasattr(self, 'crowns') and orig in self.crowns:
                     self.crowns[target] = self.crowns.pop(orig)
             
             self.move_piece_to_cell(target, piece_id)
+            
+            # Vérifier la promotion
             self.check_promotion(target, color)
             
+            # Changer de tour
             self.tour_joueur = "cadetblue" if self.tour_joueur == "coral" else "coral"
             
         else:
+            # Mouvement illégal : retour à la case d'origine
             self.move_piece_to_cell(orig, piece_id)
 
         self.click = False
@@ -325,6 +344,7 @@ class Damier(tk.Tk):
         
         self.can.coords(piece_id, x0, y0, x1, y1)
         
+        # Déplacer aussi la couronne si c'est un roi
         if cell in self.rois and hasattr(self, 'crowns') and cell in self.crowns:
             center_x = (x0 + x1) / 2
             center_y = (y0 + y1) / 2
@@ -335,6 +355,7 @@ class Damier(tk.Tk):
         if cell in self.pion:
             piece_id = self.pion.pop(cell)
             
+            # Supprimer la couronne si c'était un roi
             if cell in self.rois:
                 if hasattr(self, 'crowns') and cell in self.crowns:
                     self.can.delete(self.crowns[cell])
@@ -343,6 +364,7 @@ class Damier(tk.Tk):
             
             self.can.delete(piece_id)
             
+            # Mettre à jour le score
             if captor == "coral":
                 self.pions_captures["coral"] += 1
                 self.score_p1.set(str(self.pions_captures["coral"]))
@@ -362,20 +384,21 @@ class Damier(tk.Tk):
         bank_width = canvas.winfo_width()
         bank_height = canvas.winfo_height()
         
-        # Taille adaptative des pions capturés
-        piece_size = min(bank_width, bank_height) * 0.1
-        pieces_per_row = max(3, int(bank_width / (piece_size * 1.5)))
-        
-        for i in range(count):
-            row = i // pieces_per_row
-            col = i % pieces_per_row
+        if bank_width > 1 and bank_height > 1:  # Vérifier que le canvas est créé
+            # Taille adaptative des pions capturés
+            piece_size = min(bank_width, bank_height) * 0.1
+            pieces_per_row = max(3, int(bank_width / (piece_size * 1.5)))
             
-            x = piece_size + col * (piece_size * 1.2)
-            y = piece_size + row * (piece_size * 1.2)
-            
-            if y + piece_size < bank_height:  # Vérifier que ça tient dans la zone
-                canvas.create_oval(x, y, x + piece_size, y + piece_size, 
-                                 fill=color, outline="black", width=2)
+            for i in range(count):
+                row = i // pieces_per_row
+                col = i % pieces_per_row
+                
+                x = piece_size * 0.5 + col * (piece_size * 1.2)
+                y = piece_size * 0.5 + row * (piece_size * 1.2)
+                
+                if y + piece_size < bank_height - piece_size * 0.5:
+                    canvas.create_oval(x, y, x + piece_size, y + piece_size, 
+                                     fill=color, outline="black", width=2)
 
 if __name__ == "__main__":
     damier = Damier()
